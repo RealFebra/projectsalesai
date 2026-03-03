@@ -49,9 +49,17 @@ echo ""
 echo "[4/6] Qwen3-VL-8B-Thinking modeli indiriliyor..."
 echo "  (Bu ~15-20 dakika surebilir)"
 
-huggingface-cli download Qwen/Qwen3-VL-8B-Thinking \
-    --local-dir /workspace/models/Qwen3-VL-8B-Thinking \
-    --local-dir-use-symlinks False
+pip install -q "huggingface_hub[cli]"
+
+python -c "
+from huggingface_hub import snapshot_download
+snapshot_download(
+    'Qwen/Qwen3-VL-8B-Thinking',
+    local_dir='/workspace/models/Qwen3-VL-8B-Thinking',
+    ignore_patterns=['*.msgpack', '*.h5']
+)
+print('Model indirildi.')
+"
 
 echo "  OK: Model indirildi."
 
