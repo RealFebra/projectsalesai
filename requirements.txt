@@ -1,0 +1,42 @@
+# Qwen3-VL-8B-Thinking Fine-Tuning Requirements
+# GPU: NVIDIA RTX 5070 Ti (16GB VRAM)
+# Method: QLoRA 4-bit via Unsloth
+
+# Core
+unsloth[cu131-torch260]
+transformers>=4.51.0
+accelerate>=1.6.0
+peft>=0.15.0
+trl>=0.18.0
+datasets>=3.5.0
+bitsandbytes>=0.45.0
+
+# Qwen3-VL specific
+qwen-vl-utils>=0.0.10
+
+# Data processing
+pandas
+pillow
+requests
+tqdm
+
+# Evaluation
+rouge-score
+nlt
+
+# Config
+pyyaml
+
+# Layer 2: RAG (Memory Katmanı)
+langchain
+langchain-community
+chromadb
+sentence-transformers
+
+# Layer 3: Agent & Tools
+facebook-business
+openpyxl
+
+# UI
+gradio
+

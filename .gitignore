@@ -1,0 +1,47 @@
+# Büyük model ve data dosyaları — GitHub'a gitmesin
+models/
+*.jsonl
+*.arrow
+*.bin
+*.safetensors
+*.pt
+*.ckpt
+
+# Unsloth cache
+unsloth_compiled_cache/
+
+# Test dosyaları
+test_*.py
+compass_artifact_*.md
+
+# Çıktı
+output/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Kaggle key (GİZLİ)
+kaggle.json
+*.env
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Geçici dosyalar
+*.tmp
+*.log
+tmp/
