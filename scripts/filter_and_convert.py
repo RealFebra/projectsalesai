@@ -33,14 +33,9 @@ etkileyici satirlar cikarir veya stratejik optimizasyon onerileri sunarsin."""
 # Yardimci Fonksiyonlar
 # -------------------------------------------------------------------------
 def is_valid_text(txt):
-    if not txt: return False
-    if not isinstance(txt, str):
-        try:
-            txt = str(txt)
-        except:
-            return False
-    txt = txt.strip()
-    return len(txt) >= 2 and txt.lower() not in ["none", "nan", "null", "unknown", "[]", "{}"]
+    if txt is None or txt == "" or str(txt).strip() == "": return False
+    txt_str = str(txt).strip()
+    return txt_str.lower() not in ["none", "nan", "null", "unknown", "[]", "{}"]
 
 def think(instruction: str, insight: str) -> str:
     preview = instruction[:150].replace("\n", " ").strip()
@@ -124,11 +119,12 @@ def process_generic_tabular_row(row: dict) -> dict:
             return make_ex(u, a)
 
     # 5. ULTIMATE CATCH-ALL Fallback
-    valid_items = {k: v for k, v in row.items() if v is not None and str(v).strip().lower() not in ["none", "nan", "", "null"]}
+    # Remove obvious non-informative columns and formatting overhead
+    valid_items = {k: v for k, v in row.items() if v is not None and str(v).strip() != "" and str(v).strip().lower() not in ["none", "nan", "null"]}
     if len(valid_items) > 0:
-        summary = ", ".join([f"{k}: {str(v)[:100]}" for k, v in list(valid_items.items())[:15]])
-        u = f"Bu sistem veya e-ticaret verisini yorumlayip bir pazarlama cikarimi veya metrik analizi yap:\n{summary}"
-        a = f"Veriler ({summary[:40]}...) baz alindiginda, satis performansini artirmak icin musteri gruplamasi, hedef kitlesel A/B testleri veya crm revizyonlari gibi satissal reaksiyonlar hedeflenebilir."
+        summary = ", ".join([f"{k}: {str(v)[:300]}" for k, v in list(valid_items.items())[:20]]) # Allow more columns and length
+        u = f"Bu sistem veya e-ticaret verisini analiz et, pazarlama statejisi, performans/metrik yorumu veya anomali tespiti yap:\n\n{summary}"
+        a = f"Veriler ({str(list(valid_items.values())[0])[:50]}...) incelendiginde, satis performansini artirmak icin musteri segmentasyonu, hedef kitlesel A/B testleri veya butce optimizasyonlari gibi satissal reaksiyonlar planlanmalidir."
         return make_ex(u, a)
 
     return None # Anlamli bir format bulunamadi
