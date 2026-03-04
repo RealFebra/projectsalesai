@@ -541,107 +541,31 @@ def main():
     print(f"✅ LoRA eklendi! Trainable: {trainable:,} / {total:,} ({100*trainable/total:.2f}%)")
 
     # ── 3. Veri yükle ──
-    from datasets import load_dataset as hf_load_dataset, Dataset
+    from datasets import load_dataset as hf_load_dataset
     
-    # Disk-tabanlı pipeline: RAM'i korumak için örnekler diske yazılır
-    TEMP_JSONL = "E:/projectfinetune/models/tmp/training_data.jsonl"
-    os.makedirs(os.path.dirname(TEMP_JSONL), exist_ok=True)
-    
-    if args.from_file and os.path.exists(args.from_file):
-        print(f"\n📊 Dosyadan yukleniyor: {args.from_file}")
-        # LIMIT SIZE: 168M is too big for disk cache. Limiting to first 2.5M examples.
-        # Also streaming approach avoids the massive .arrow file creation on E:
-        from datasets import IterableDataset
-        dataset_iterable = hf_load_dataset("json", data_files=args.from_file, split="train", streaming=True)
-        dataset_list = []
-        count = 0
-        limit = min(args.max_samples, 999_999_999) # No cap — temiz dosyanin tamamini kullan
-        for item in dataset_iterable:
-            dataset_list.append(item)
-            count += 1
-            if count >= limit:
-                break
-        
-        from datasets import Dataset
-        dataset = Dataset.from_list(dataset_list)
-        print(f"✅ {count:,} ornek hafizaya yuklendi (cache olusturulmadan).")
-    else:
-        total_written = 0
-        with open(TEMP_JSONL, 'w', encoding='utf-8') as out_f:
-            # HuggingFace datasetleri
-            for ds_info in TIER1_DATASETS:
-                hf_id = ds_info["hf_id"]
-                ds_type = ds_info["type"]
-                max_samples = ds_info["max"]
-                converter = CONVERTERS.get(ds_type, convert_instruction)
+    train_file = args.from_file
+    if not train_file or not os.path.exists(train_file):
+        print(f"❌ HATA: Egitim dosyasi bulunamadi: {train_file}")
+        print("Lütfen once download_all_raw_datasets.py ve filter_and_convert.py calistirin.")
+        return
 
-                print(f"\n  📡 Streaming: {hf_id} (sınırsız)" if not max_samples else f"\n  📡 Streaming: {hf_id} (max {max_samples})")
-                try:
-                    from datasets import load_dataset
-                    kwargs = dict(ds_info.get("kwargs", {}))  # kopya al
-                    split_name = kwargs.pop("split", "train")
-                    ds = load_dataset(hf_id, split=split_name, **kwargs)
-                    
-                    count = 0
-                    errors = 0
-                    for item in ds:
-                        if max_samples and count >= max_samples:
-                            break
-                        try:
-                            example = converter(item)
-                            if example:
-                                # Chat template uygula ve diske yaz
-                                messages = example.get("messages", [])
-                                text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False)
-                                if text:
-                                    line = json.dumps({"text": text}, ensure_ascii=False)
-                                    line = line.encode('utf-8', errors='replace').decode('utf-8')
-                                    out_f.write(line + "\n")
-                                    count += 1
-                                    total_written += 1
-                        except Exception:
-                            errors += 1
-                            if errors > 50:
-                                break
+    print(f"\n� Dataset diskten yükleniyor: {train_file}")
+    dataset = hf_load_dataset("json", data_files=train_file, split="train")
 
-                    print(f"     ✅ {count} örnek alındı" + (f" ({errors} hata)" if errors else ""))
-                except Exception as e:
-                    print(f"     ❌ Hata: {str(e)[:100]}")
+    if args.max_samples and args.max_samples < len(dataset):
+        print(f"✂️  Dataset {args.max_samples} ornek ile sinirlandiriliyor...")
+        dataset = dataset.select(range(args.max_samples))
 
-            # Kaggle / External local data
-            local_external_file = "D:/datasets/sales_marketing/external_training_data.jsonl"
-            if os.path.exists(local_external_file):
-                print(f"\n  📥 Yerel Diskteki Dış Kaynak Verisi Yükleniyor... ({local_external_file})")
-                local_count = 0
-                with open(local_external_file, 'r', encoding='utf-8') as lf:
-                    for line in lf:
-                        try:
-                            item = json.loads(line.strip())
-                            example = convert_instruction(item)
-                            if example:
-                                messages = example.get("messages", [])
-                                text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False)
-                                if text:
-                                    out_line = json.dumps({"text": text}, ensure_ascii=False)
-                                    out_line = out_line.encode('utf-8', errors='replace').decode('utf-8')
-                                    out_f.write(out_line + "\n")
-                                    local_count += 1
-                                    total_written += 1
-                        except Exception:
-                            continue
-                        if local_count % 100000 == 0 and local_count > 0:
-                            print(f"     ... {local_count:,} yerel kayıt işlendi")
-                print(f"     ✅ {local_count:,} adet yerel Kaggle/External kayıt eğitime eklendi.")
-            
-            print(f"\n  🚀 GENEL TOPLAM: {total_written:,} örnek diske yazıldı.")
+    print(f"💬 Chat template uygulaniyor... ({len(dataset):,} ornek)")
+    def format_chat(example):
+        text = tokenizer.apply_chat_template(
+            example["messages"], 
+            tokenize=False, 
+            add_generation_prompt=False
+        )
+        return {"text": text}
 
-        if total_written == 0:
-            print("❌ Hiç veri yüklenemedi!")
-            return
-
-        # Adım 2: Diskten memory-mapped olarak yükle (RAM dostu!)
-        print(f"\n📂 Dataset diskten yükleniyor (memory-mapped)...")
-        dataset = hf_load_dataset("json", data_files=TEMP_JSONL, split="train")
+    dataset = dataset.map(format_chat, num_proc=os.cpu_count() or 4, desc="Applying chat template")
 
     print(f"✅ Dataset hazır: {len(dataset):,} örnek")
 

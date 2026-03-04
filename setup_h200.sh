@@ -72,14 +72,14 @@ sed -i 's|./output/|/workspace/output/|g' /workspace/configs/finetune_config.yam
 
 echo "  OK: Config güncellendi."
 
-# ── 6. Kaggle datasetleri ────────────────────────────────────────────────────
+# ── 6. Tum Datasetleri Indirme (104 adet) ────────────────────────────────────
 echo ""
-echo "[6/7] Kaggle metin datasetleri indiriliyor ve donusturuluyor..."
-python /workspace/scripts/download_kaggle_datasets.py
+echo "[6/7] Tüm HF ve Kaggle veri setleri (104) raw klasörüne indiriliyor..."
+python /workspace/scripts/download_all_raw_datasets.py
 
 echo ""
-echo "[7/7] Tablosal Kaggle datasetleri indiriliyor ve donusturuluyor..."
-python /workspace/scripts/convert_tabular_datasets.py
+echo "[7/7] Raw veriler Qwen3-VL Thinking formatına dönüştürülüp filtreleniyor..."
+python /workspace/scripts/filter_and_convert.py
 
 echo ""
 echo "=================================================="
