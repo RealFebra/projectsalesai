@@ -33,9 +33,14 @@ etkileyici satirlar cikarir veya stratejik optimizasyon onerileri sunarsin."""
 # Yardimci Fonksiyonlar
 # -------------------------------------------------------------------------
 def is_valid_text(txt):
-    if not txt or not isinstance(txt, str): return False
+    if not txt: return False
+    if not isinstance(txt, str):
+        try:
+            txt = str(txt)
+        except:
+            return False
     txt = txt.strip()
-    return len(txt) > 20 and txt.lower() not in ["none", "nan", "null", "unknown"]
+    return len(txt) >= 2 and txt.lower() not in ["none", "nan", "null", "unknown", "[]", "{}"]
 
 def think(instruction: str, insight: str) -> str:
     preview = instruction[:150].replace("\n", " ").strip()
@@ -51,8 +56,8 @@ def make_ex(user: str, assistant: str) -> dict:
     return {
         "messages": [
             {"role": "system",    "content": SYSTEM_PROMPT},
-            {"role": "user",      "content": user[:4000].strip()},
-            {"role": "assistant", "content": think(user, assistant[:4000].strip())},
+            {"role": "user",      "content": str(user)[:4000].strip()},
+            {"role": "assistant", "content": think(str(user), str(assistant)[:4000].strip())},
         ]
     }
 
@@ -61,55 +66,72 @@ def make_ex(user: str, assistant: str) -> dict:
 # -------------------------------------------------------------------------
 
 def process_generic_tabular_row(row: dict) -> dict:
-    """Tablosal bir satiri basitce formatlar, eger ozellesmis bir analyzer yoksa fallback olarak calisir."""
-    # Ozellikle "text", "review", "description", "headline", "body", "content" vs var mi bak
-    keys_lower = {k.lower(): k for k in row.keys()}
+    """Tablosal, metin veya sohbet formatindaki satir objesini Qwen3-VL formatina donusturur."""
+    keys_lower = {str(k).lower(): k for k in row.keys()}
     
-    # 1. Acik Metin (Text, Review, Headline) varsa -> Analiz iste
-    text_keys = ["text", "review", "headline", "description", "body", "content", "message", "tweet", "comment"]
-    found_text_key = next((keys_lower[k] for k in text_keys if k in keys_lower), None)
+    # 1. Sohbet / Mesaj Formati (messages, conversations)
+    msg_keys = ["messages", "conversations", "dialogue", "chat"]
+    found_msg = next((keys_lower[k] for k in msg_keys if k in keys_lower), None)
+    if found_msg and isinstance(row[found_msg], list) and len(row[found_msg]) > 0:
+        msgs = row[found_msg]
+        user_text, assistant_text = "", ""
+        for m in msgs:
+            if isinstance(m, dict):
+                role = str(m.get("role", m.get("from", ""))).lower()
+                val = str(m.get("content", m.get("value", m.get("text", ""))))
+                if role in ["user", "human", "client", "customer"]:
+                    user_text += val + "\n"
+                elif role in ["assistant", "gpt", "bot", "agent", "system"]:
+                    assistant_text += val + "\n"
+        if is_valid_text(user_text) and is_valid_text(assistant_text):
+            return make_ex(user_text, assistant_text)
+
+    # 2. Soru-Cevap veya Instruction-Output Formati
+    q_keys = ["instruction", "question", "prompt", "query", "input"]
+    a_keys = ["output", "answer", "response", "completion", "target"]
+    found_q = next((keys_lower[k] for k in q_keys if k in keys_lower), None)
+    found_a = next((keys_lower[k] for k in a_keys if k in keys_lower), None)
     
-    if found_text_key and is_valid_text(row[found_text_key]):
-        text_val = row[found_text_key]
+    if found_q and found_a:
+        q = row[found_q]
+        a = row[found_a]
+        # Eger instruction ve input ayriysa birlestir
+        if found_q == keys_lower.get("instruction") and "input" in keys_lower:
+            inp = row[keys_lower["input"]]
+            if is_valid_text(inp):
+                q = f"{q}\n\nDetay/Baglam:\n{inp}"
+                
+        if is_valid_text(q) and is_valid_text(a):
+            return make_ex(str(q), str(a))
+
+    # 3. Metin + Etiket Formati (Review, Slogan, Tweet vb.)
+    text_keys = ["text", "review", "headline", "description", "body", "content", "message", "tweet", "comment", "title", "slogan"]
+    found_text = next((keys_lower[k] for k in text_keys if k in keys_lower), None)
+    
+    if found_text and is_valid_text(row[found_text]):
+        text_val = row[found_text]
+        label_keys = ["label", "sentiment", "score", "rating", "clickbait", "churn", "converted", "category", "topic", "class"]
+        found_label = next((keys_lower[k] for k in label_keys if k in keys_lower), None)
         
-        # Etiket/skor var mi bak (label, sentiment, score, rating, clickbait, churn vb.)
-        label_keys = ["label", "sentiment", "score", "rating", "clickbait", "churn", "target", "converted"]
-        found_label_key = next((keys_lower[k] for k in label_keys if k in keys_lower), None)
-        
-        if found_label_key:
-            label_val = row[found_label_key]
-            u = f"Bu metni/icerigi pazarlama acisindan analiz et: \n\n\"{text_val}\""
-            a = f"Degerlendirme Sonucu: {label_val}\n\nBu tarz bir icerik izleyicide/musteride yukaridaki etkiyi/kategoriyi tetikleme egilimindedir."
+        if found_label and is_valid_text(row[found_label]):
+            label_val = row[found_label]
+            u = f"Asagidaki metni/icerigi analiz ederek pazarlama/satis etkisini degerlendir:\n\n\"{text_val}\""
+            a = f"Analiz/Etiket: {label_val}\n\nBu tur icerikler, bahsedilen kategoride tepki olusturma potansiyeline sahiptir."
             return make_ex(u, a)
         else:
-            # Sadece metin varsa (ornegin urun aciklamasi), reklam kopyasi yazdirmaya zorla
-            u = f"Asagidaki bilgiye dayanarak carpici bir reklam basligi ve kisa aciklamasi yaz:\n\n{text_val}"
-            a = f"Baslik: {text_val[:30].strip()}...\nSpot: Bu detaylara sahip urun/hizmet ile hedef kitleye dogrudan temas et.\n(Aciklama bazli uretildigi icin asil yaratici kopyayi senin stratejine birakiyorum.)"
+            u = f"Gelen veriyi kullanarak carpici bir reklam/pazarlama konsepti cikar:\n\n{text_val}"
+            a = f"Konsept Odagi: {str(text_val)[:50].strip()}...\n\nBu metnin temel mesajina uygun bir kanca (hook) kurgusu ile kitleye dogrudan temas edilmelidir."
             return make_ex(u, a)
 
-    # 2. Eger Q&A yapisi ise
-    if "question" in keys_lower and "answer" in keys_lower:
-        q = row[keys_lower["question"]]
-        a = row[keys_lower["answer"]]
-        if is_valid_text(q) and is_valid_text(a):
-            return make_ex(q, a)
+    # 5. ULTIMATE CATCH-ALL Fallback
+    valid_items = {k: v for k, v in row.items() if v is not None and str(v).strip().lower() not in ["none", "nan", "", "null"]}
+    if len(valid_items) > 0:
+        summary = ", ".join([f"{k}: {str(v)[:100]}" for k, v in list(valid_items.items())[:15]])
+        u = f"Bu sistem veya e-ticaret verisini yorumlayip bir pazarlama cikarimi veya metrik analizi yap:\n{summary}"
+        a = f"Veriler ({summary[:40]}...) baz alindiginda, satis performansini artirmak icin musteri gruplamasi, hedef kitlesel A/B testleri veya crm revizyonlari gibi satissal reaksiyonlar hedeflenebilir."
+        return make_ex(u, a)
 
-    if "instruction" in keys_lower and "output" in keys_lower:
-        q = row[keys_lower["instruction"]]
-        a = row[keys_lower["output"]]
-        if is_valid_text(q) and is_valid_text(a):
-            return make_ex(q, a)
-
-    # 3. Bilindik tablo kolonlari (kampanya, metrikler vs)
-    if "clicks" in keys_lower or "spend" in keys_lower or "revenue" in keys_lower or "impressions" in keys_lower:
-        # Tablosal reklam verisi
-        summary = ", ".join([f"{k}: {v}" for k, v in row.items() if v and str(v).lower() not in ["none", "nan", ""]])
-        if len(summary) > 20:
-             u = f"Bu reklam/kampanya tablosunu analiz et ve optimize et:\n{summary}"
-             a = f"Veriler incelendiginde (or: {summary[:100]}), bu tur kampanyalarda ROI/CTR artisi saglamak icin en cok harcama getiren -ya da donusum saglayan- kanala agirlik verilmeli, A/B testi uygulanmalidir."
-             return make_ex(u, a)
-
-    return None # Anlamli bir sey cikarilamadi
+    return None # Anlamli bir format bulunamadi
 
 def process_file(file_path: str, out_f) -> int:
     count = 0
@@ -117,7 +139,7 @@ def process_file(file_path: str, out_f) -> int:
     
     try:
         if ext == '.csv':
-            with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                 reader = csv.DictReader(f)
                 for row in reader:
                     ex = process_generic_tabular_row(row)
@@ -126,7 +148,7 @@ def process_file(file_path: str, out_f) -> int:
                         count += 1
                         
         elif ext == '.jsonl':
-             with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+             with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                   for str_line in f:
                        try:
                            row = json.loads(str_line)
@@ -139,15 +161,35 @@ def process_file(file_path: str, out_f) -> int:
                            pass
                            
         elif ext == '.json':
-            with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
-                data = json.load(f)
-                if isinstance(data, list):
-                    for row in data:
-                        if isinstance(row, dict):
-                            ex = process_generic_tabular_row(row)
-                            if ex:
-                                out_f.write(json.dumps(ex, ensure_ascii=False) + "\n")
-                                count += 1
+            content_list = []
+            try:
+                with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    data = json.load(f)
+                    if isinstance(data, list):
+                        content_list = data
+                    elif isinstance(data, dict):
+                        for k, v in data.items():
+                            if isinstance(v, list):
+                                content_list.extend(v)
+            except json.JSONDecodeError:
+                # Kaggle JSON'larinin cogu hatali olarak jsonl formatina sahip
+                with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    for line in f:
+                        try:
+                            content_list.append(json.loads(line))
+                        except json.JSONDecodeError:
+                            pass
+            
+            for row in content_list:
+                if isinstance(row, dict):
+                    ex = process_generic_tabular_row(row)
+                    if ex:
+                        try:
+                            out_f.write(json.dumps(ex, ensure_ascii=False) + "\n")
+                            count += 1
+                        except Exception:
+                            pass
+
         
         # Parquet, Arrow, vs HF tarafindan direkt datsets cacheine alindigi icin klasor icini tararken atliyoruz, 
         # onlari asagida load_dataset ile process edecegiz eger HF ise. Kaggle'dan baska bir sey geldiyse pandas gerekir, basitlik adina atliyoruz.
@@ -201,10 +243,9 @@ def main():
                 for file in files:
                     if file.endswith(('.csv', '.json', '.jsonl')):
                         fpath = os.path.join(root, file)
-                        print(f"  Isleme aliniyor: {fpath}")
                         c = process_file(fpath, out_f)
                         total += c
-                        print(f"    -> {c:,} gecerli formatta ornek cikarildi.")
+                        print(f"  {file} -> {c:,} ornek")
 
         # 2. HF Klasorlerini Tara (Genelde Parquet/JSONL)
         hf_dir = os.path.join(RAW_DIR, "hf")
@@ -227,7 +268,7 @@ def main():
                      
                      c = local_c + parquet_c
                      total += c
-                     print(f"    -> {c:,} gecerli formatta ornek cikarildi.")
+                     print(f"  HF:{repo_folder} -> {c:,} ornek")
 
     print(f"\n==================================================")
     print(f"TAMAMLANDI!")
