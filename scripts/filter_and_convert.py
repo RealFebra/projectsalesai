@@ -133,7 +133,7 @@ def process_generic_tabular_row(row: dict) -> dict:
 
     return None # Anlamli bir format bulunamadi
 
-def process_file(file_path: str, out_f) -> int:
+def process_file(file_path: str, out_f, max_samples: int = 50000) -> int:
     count = 0
     ext = os.path.splitext(file_path)[-1].lower()
     
@@ -142,6 +142,8 @@ def process_file(file_path: str, out_f) -> int:
             with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                 reader = csv.DictReader(f)
                 for row in reader:
+                    if count >= max_samples:
+                        break
                     ex = process_generic_tabular_row(row)
                     if ex:
                         out_f.write(json.dumps(ex, ensure_ascii=False) + "\n")
@@ -150,6 +152,8 @@ def process_file(file_path: str, out_f) -> int:
         elif ext == '.jsonl':
              with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                   for str_line in f:
+                       if count >= max_samples:
+                           break
                        try:
                            row = json.loads(str_line)
                            if isinstance(row, dict):
@@ -181,6 +185,8 @@ def process_file(file_path: str, out_f) -> int:
                             pass
             
             for row in content_list:
+                if count >= max_samples:
+                    break
                 if isinstance(row, dict):
                     ex = process_generic_tabular_row(row)
                     if ex:
@@ -199,7 +205,7 @@ def process_file(file_path: str, out_f) -> int:
         
     return count
 
-def process_hf_parquet(dataset_dir: str, out_f) -> int:
+def process_hf_parquet(dataset_dir: str, out_f, max_samples: int = 50000) -> int:
     """HuggingFace reposundan inen parquet/arrow dosyalarini datasets kutuphanesi ile okur"""
     count = 0
     from datasets import load_dataset
@@ -211,6 +217,8 @@ def process_hf_parquet(dataset_dir: str, out_f) -> int:
             
         ds = load_dataset("parquet", data_files=parquet_files, split="train")
         for row in tqdm(ds, desc=f"  {os.path.basename(dataset_dir)}", leave=False):
+             if count >= max_samples:
+                 break
              ex = process_generic_tabular_row(row)
              if ex:
                  out_f.write(json.dumps(ex, ensure_ascii=False) + "\n")
