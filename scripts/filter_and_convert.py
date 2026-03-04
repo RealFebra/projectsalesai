@@ -133,7 +133,7 @@ def process_generic_tabular_row(row: dict) -> dict:
 
     return None # Anlamli bir format bulunamadi
 
-def process_file(file_path: str, out_f, max_samples: int = 50000) -> int:
+def process_file(file_path: str, out_f, max_samples: int = 1000000) -> int:
     count = 0
     ext = os.path.splitext(file_path)[-1].lower()
     
@@ -205,7 +205,7 @@ def process_file(file_path: str, out_f, max_samples: int = 50000) -> int:
         
     return count
 
-def process_hf_parquet(dataset_dir: str, out_f, max_samples: int = 50000) -> int:
+def process_hf_parquet(dataset_dir: str, out_f, max_samples: int = 1000000) -> int:
     """HuggingFace reposundan inen parquet/arrow dosyalarini datasets kutuphanesi ile okur"""
     count = 0
     from datasets import load_dataset
