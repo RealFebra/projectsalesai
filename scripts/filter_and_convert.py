@@ -141,9 +141,11 @@ def process_file(file_path: str, out_f, max_samples: int = 1000000) -> int:
         if ext == '.csv':
             with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                 reader = csv.DictReader(f)
-                for row in reader:
-                    if count >= max_samples:
-                        break
+                all_rows = list(reader)
+                if len(all_rows) > max_samples:
+                    all_rows = all_rows[-max_samples:]
+                    
+                for row in all_rows:
                     ex = process_generic_tabular_row(row)
                     if ex:
                         out_f.write(json.dumps(ex, ensure_ascii=False) + "\n")
@@ -151,9 +153,11 @@ def process_file(file_path: str, out_f, max_samples: int = 1000000) -> int:
                         
         elif ext == '.jsonl':
              with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                  for str_line in f:
-                       if count >= max_samples:
-                           break
+                  lines = f.readlines()
+                  if len(lines) > max_samples:
+                      lines = lines[-max_samples:]
+                      
+                  for str_line in lines:
                        try:
                            row = json.loads(str_line)
                            if isinstance(row, dict):
@@ -184,9 +188,10 @@ def process_file(file_path: str, out_f, max_samples: int = 1000000) -> int:
                         except json.JSONDecodeError:
                             pass
             
+            if len(content_list) > max_samples:
+                content_list = content_list[-max_samples:]
+                
             for row in content_list:
-                if count >= max_samples:
-                    break
                 if isinstance(row, dict):
                     ex = process_generic_tabular_row(row)
                     if ex:
@@ -217,9 +222,9 @@ def process_hf_parquet(dataset_dir: str, out_f, max_samples: int = 1000000) -> i
             
         ds = load_dataset("parquet", data_files=parquet_files, split="train")
         
-        # Kesin limit uygulama: Eger total > max_samples ise bastan slice yapalim (15 saat suren tqdm sarmalini onlemek icin)
+        # Guncel veriyi almak adina son siradaki elemanlari seciyoruz:
         if len(ds) > max_samples:
-            ds = ds.select(range(max_samples))
+            ds = ds.select(range(len(ds) - max_samples, len(ds)))
             
         for row in tqdm(ds, desc=f"  {os.path.basename(dataset_dir)}", leave=False):
              ex = process_generic_tabular_row(row)
