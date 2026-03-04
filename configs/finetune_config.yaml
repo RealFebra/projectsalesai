@@ -3,7 +3,7 @@
 # Method: QLoRA 4-bit via Unsloth
 
 model:
-  name: "E:/projectfinetune/models/Qwen3-VL-8B-Thinking"
+  name: "unsloth/Qwen3-VL-8B-Instruct"
   max_seq_length: 2048
   load_in_4bit: true
   dtype: "bfloat16"
