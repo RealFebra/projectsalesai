@@ -216,9 +216,12 @@ def process_hf_parquet(dataset_dir: str, out_f, max_samples: int = 1000000) -> i
             return 0
             
         ds = load_dataset("parquet", data_files=parquet_files, split="train")
+        
+        # Kesin limit uygulama: Eger total > max_samples ise bastan slice yapalim (15 saat suren tqdm sarmalini onlemek icin)
+        if len(ds) > max_samples:
+            ds = ds.select(range(max_samples))
+            
         for row in tqdm(ds, desc=f"  {os.path.basename(dataset_dir)}", leave=False):
-             if count >= max_samples:
-                 break
              ex = process_generic_tabular_row(row)
              if ex:
                  out_f.write(json.dumps(ex, ensure_ascii=False) + "\n")
