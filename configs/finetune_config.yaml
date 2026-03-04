@@ -4,7 +4,7 @@
 
 model:
   name: "E:/projectfinetune/models/Qwen3-VL-8B-Thinking"
-  max_seq_length: 4096
+  max_seq_length: 2048
   load_in_4bit: true
   dtype: "bfloat16"
 
@@ -26,8 +26,8 @@ lora:
 training:
   output_dir: "./output/satis-reklam-ai"
   num_train_epochs: 3                      # 5M x 3 epoch = 15M toplam
-  per_device_train_batch_size: 64          # H200 MAX — 141GB VRAM, batch 64 rahat (~70-80GB kullanim)
-  gradient_accumulation_steps: 8           # Effective batch = 64×8 = 512
+  per_device_train_batch_size: 8           # OOM fix: 64'ten 8'e dusuruldu
+  gradient_accumulation_steps: 64          # Effective batch = 8×64 = 512
   learning_rate: 1.0e-4                    # Büyük batch → daha küçük LR
   lr_scheduler_type: "cosine"
   warmup_ratio: 0.03
